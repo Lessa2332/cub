@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Фото-Куля</title>
+    <title>3D Фото-Куля (Правильні пропорції)</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            /* Темно-бірюзовий фон */
             background-color: #062c30; 
         }
         canvas {
@@ -17,102 +16,99 @@
             height: 100vh;
         }
     </style>
-    <!-- Підключаємо Three.js та OrbitControls через CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
     <script>
-        // 1. Ініціалізація сцени, камери та рендерера
         const scene = new THREE.Scene();
-        // Встановлюємо колір фону сцени (темна бірюза)
         scene.background = new THREE.Color(0x062c30); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 8; // Початкова відстань камери від кулі
+        camera.position.z = 8; 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // 2. Налаштування керування (Обертання та Масштабування пальцями)
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true; // Плавність зупинки обертання
+        controls.enableDamping = true; 
         controls.dampingFactor = 0.05;
-        controls.minDistance = 3;      // Наскільки близько можна піднести камеру
-        controls.maxDistance = 15;     // Наскільки далеко можна віддалити
+        controls.minDistance = 3;      
+        controls.maxDistance = 15;     
 
-        // 3. Створення кулі з прямокутників
         const textureLoader = new THREE.TextureLoader();
-        const count = 15; // Кількість фото-панелей у кулі
-        const radius = 4; // Радіус нашої віртуальної кулі
+        const count = 15; 
+        const radius = 4; 
 
-        // Масив із твоїми трьома фотографіями
         const photoPaths = [
             'foto/1.jpg',
             'foto/2.jpg',
             'foto/3.jpg'
         ];
 
-        // Геометрія прямокутника (співвідношення сторін 4:3 або близько до того)
-        const planeGeometry = new THREE.PlaneGeometry(1.6, 1.2);
+        // Базова геометрія 1x1. Ми будемо масштабувати її динамічно під кожне фото
+        const baseGeometry = new THREE.PlaneGeometry(1, 1);
 
-        // Рівномірно розподіляємо прямокутники по сферичній траєкторії (Алгоритм Фібоначчі)
         for (let i = 0; i < count; i++) {
             const phi = Math.acos(1 - 2 * (i + 0.5) / count);
             const theta = Math.sqrt(count * Math.PI) * phi;
 
-            // Обчислення координат X, Y, Z для кожного прямокутника
             const x = radius * Math.sin(phi) * Math.cos(theta);
             const y = radius * Math.cos(phi);
             const z = radius * Math.sin(phi) * Math.sin(theta);
 
-            // Чергуємо 3 фотографії по колу (% 3)
-            const texture = textureLoader.load(photoPaths[i % 3]);
-            
-            // Матеріал для фото (DoubleSide, щоб фото було видно і зсередини кулі)
+            // Створюємо матеріал. Тимчасово робимо його невидимим, поки фото не завантажиться
             const material = new THREE.MeshBasicMaterial({ 
-                map: texture, 
-                side: THREE.DoubleSide 
+                side: THREE.DoubleSide,
+                visible: false 
             });
 
-            const mesh = new THREE.Mesh(planeGeometry, material);
+            const mesh = new THREE.Mesh(baseGeometry, material);
             mesh.position.set(x, y, z);
-
-            // Повертаємо прямокутник так, щоб він дивився назовні від центру кулі
             mesh.lookAt(x * 2, y * 2, z * 2);
 
-            // 4. Створення неонової рамки (світіння)
-            const edges = new THREE.EdgesGeometry(planeGeometry);
-            // Яскравий неоновий колір (електричний бірюзовий/циан)
+            // Створення базової неонової рамки 1x1 всередині меша
+            const edges = new THREE.EdgesGeometry(baseGeometry);
             const lineMaterial = new THREE.LineBasicMaterial({ 
                 color: 0x00f3ff, 
-                linewidth: 2 // Примітка: товщина ліній у WebGL на багатьох пристроях за замовчуванням 1
+                linewidth: 2 
             });
             const wireframe = new THREE.LineSegments(edges, lineMaterial);
-            
-            // Трохи зсуваємо рамку вперед, щоб вона не перекривалася текстурою
-            wireframe.position.z = 0.01; 
+            wireframe.position.z = 0.005; // мінімальний зсув вперед, щоб не було мигтіння текстури
             mesh.add(wireframe);
 
-            // Додаємо прямокутник на сцену
             scene.add(mesh);
+
+            // Асинхронне завантаження фотографії
+            textureLoader.load(photoPaths[i % 3], function(texture) {
+                // Рахуємо пропорцію зображення (ширина поділена на висоту)
+                const aspect = texture.image.width / texture.image.height;
+                
+                // Задаємо бажану базову висоту для всіх фото на екрані (наприклад, 1.2)
+                const baseHeight = 1.2;
+                // Автоматично вираховуємо ширину, яка збереже оригінальні пропорції
+                const targetWidth = baseHeight * aspect;
+
+                // Масштабуємо рамку разом із фото
+                mesh.scale.set(targetWidth, baseHeight, 1);
+
+                // Додаємо текстуру в матеріал і робимо її видимою
+                material.map = texture;
+                material.visible = true;
+                material.needsUpdate = true;
+            });
         }
 
-        // 5. Анімація (постійне оновлення кадру)
         function animate() {
             requestAnimationFrame(animate);
-
-            // Оновлюємо контроллери для плавності
             controls.update(); 
-
             renderer.render(scene, camera);
         }
         animate();
 
-        // 6. Адаптивність екрану при зміні розміру вікна або орієнтації смартфону
         window.addEventListener('resize', onWindowResize, false);
 
         function onWindowResize() {
