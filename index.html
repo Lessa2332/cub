@@ -2,8 +2,8 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Інтерактивна Карта України</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Фото-Куля (Правильні пропорції)</title>
     <style>
         body {
             margin: 0;
@@ -22,12 +22,11 @@
 <body>
 
     <script>
-        // --- 1. СЦЕНА ТА КАМЕРА ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x062c30); 
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 0, 9); // Ідеальна відстань для огляду всієї карти
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 8; 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -37,139 +36,72 @@
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true; 
         controls.dampingFactor = 0.05;
-        controls.minDistance = 2;      
-        controls.maxDistance = 20;     
+        controls.minDistance = 3;      
+        controls.maxDistance = 15;     
 
         const textureLoader = new THREE.TextureLoader();
+        const count = 15; 
+        const radius = 4; 
 
-        // --- 2. НАЛАШТУВАННЯ МАСШТАБУ ТА МАСИВУ ФОТО ---
-        const count = 100; // Збільшено кількість фото-елементів для точнішого контуру
         const photoPaths = [
             'foto/1.jpg',
             'foto/2.jpg',
             'foto/3.jpg'
         ];
 
-        // --- 3. ГЕНЕРАЦІЯ ТОЧНОГО ТРАФАРЕТУ КАРТИ УКРАЇНИ ---
-        function getUkrainePoints(targetCount) {
-            const maskCanvas = document.createElement('canvas');
-            maskCanvas.width = 240;
-            maskCanvas.height = 160;
-            const ctx = maskCanvas.getContext('2d');
-            
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
-            ctx.fillStyle = '#ffffff';
-
-            // Деталізований контур материкової України
-            ctx.beginPath();
-            const uaPolygon = [
-                // Північний кордон та Волинь
-                [15, 70], [22, 55], [30, 48], [45, 42], [60, 40], [75, 42], [90, 45],
-                [95, 30], [110, 27], [125, 25], [140, 27], [155, 30],
-                [170, 32], [185, 35], [200, 40], [215, 48], [225, 60],
-                // Східний кордон (Лонбас)
-                [235, 75], [230, 95], [220, 105],
-                // Південне узбережжя (Запоріжжя, Херсон, Миколаїв, Одеська затока)
-                [210, 110], [195, 112], [180, 110], [165, 110], [150, 112],
-                [142, 117], [135, 115], [125, 110], [110, 118], [95, 122],
-                [75, 128], [60, 125], [50, 120], [42, 115],
-                // Західний кордон та Карпати
-                [30, 108], [22, 100], [18, 90], [15, 80]
-            ];
-            ctx.moveTo(uaPolygon[0][0], uaPolygon[0][1]);
-            for(let p of uaPolygon) ctx.lineTo(p[0], p[1]);
-            ctx.closePath();
-            ctx.fill();
-
-            // Деталізований контур Криму
-            ctx.beginPath();
-            const crimeaPolygon = [
-                [142, 117], // Перекоп
-                [155, 115], [168, 118], [178, 125], // Керченський півострів
-                [175, 135], [165, 145], [155, 148], // Південне узбережжя
-                [142, 145], [130, 135], [135, 125], [138, 119] // Севастополь, Євпаторія
-            ];
-            ctx.moveTo(crimeaPolygon[0][0], crimeaPolygon[0][1]);
-            for(let p of crimeaPolygon) ctx.lineTo(p[0], p[1]);
-            ctx.closePath();
-            ctx.fill();
-
-            const imgData = ctx.getImageData(0, 0, maskCanvas.width, maskCanvas.height).data;
-            const allowedPoints = [];
-
-            // Зчитуємо білі пікселі з вищою щільністю (крок 3)
-            for (let y = 0; y < maskCanvas.height; y += 3) {
-                for (let x = 0; x < maskCanvas.width; x += 3) {
-                    const idx = (y * maskCanvas.width + x) * 4;
-                    if (imgData[idx] > 200) { 
-                        allowedPoints.push({
-                            x: (x - maskCanvas.width / 2) * 0.065,
-                            y: -(y - maskCanvas.height / 2) * 0.065
-                        });
-                    }
-                }
-            }
-
-            // Рівномірний вибір точок
-            const finalPoints = [];
-            const step = Math.floor(allowedPoints.length / targetCount);
-            for (let i = 0; i < targetCount; i++) {
-                const index = Math.min(i * step, allowedPoints.length - 1);
-                if (allowedPoints[index]) finalPoints.push(allowedPoints[index]);
-            }
-            return finalPoints;
-        }
-
-        // --- 4. РОЗСТАНОВКА ФОТО З 3D-ЕФЕКТОМ ПАНОРАМИ ---
-        const points = getUkrainePoints(count);
+        // Базова геометрія 1x1. Ми будемо масштабувати її динамічно під кожне фото
         const baseGeometry = new THREE.PlaneGeometry(1, 1);
-        const radiusCurve = 16; 
 
-        points.forEach((pt, i) => {
+        for (let i = 0; i < count; i++) {
+            const phi = Math.acos(1 - 2 * (i + 0.5) / count);
+            const theta = Math.sqrt(count * Math.PI) * phi;
+
+            const x = radius * Math.sin(phi) * Math.cos(theta);
+            const y = radius * Math.cos(phi);
+            const z = radius * Math.sin(phi) * Math.sin(theta);
+
+            // Створюємо матеріал. Тимчасово робимо його невидимим, поки фото не завантажиться
             const material = new THREE.MeshBasicMaterial({ 
                 side: THREE.DoubleSide,
                 visible: false 
             });
 
             const mesh = new THREE.Mesh(baseGeometry, material);
+            mesh.position.set(x, y, z);
+            mesh.lookAt(x * 2, y * 2, z * 2);
 
-            // Вигин карти
-            const angle = pt.x / radiusCurve;
-            const finalX = Math.sin(angle) * radiusCurve;
-            const finalZ = (Math.cos(angle) * radiusCurve) - radiusCurve;
-
-            mesh.position.set(finalX, pt.y, finalZ);
-            mesh.lookAt(0, pt.y, radiusCurve);
-
-            // Неонова рамка
+            // Створення базової неонової рамки 1x1 всередині меша
             const edges = new THREE.EdgesGeometry(baseGeometry);
             const lineMaterial = new THREE.LineBasicMaterial({ 
                 color: 0x00f3ff, 
                 linewidth: 2 
             });
             const wireframe = new THREE.LineSegments(edges, lineMaterial);
-            wireframe.position.z = 0.005; 
+            wireframe.position.z = 0.005; // мінімальний зсув вперед, щоб не було мигтіння текстури
             mesh.add(wireframe);
 
             scene.add(mesh);
 
-            // Адаптивне завантаження фото
-            textureLoader.load(photoPaths[i % photoPaths.length], function(texture) {
+            // Асинхронне завантаження фотографії
+            textureLoader.load(photoPaths[i % 3], function(texture) {
+                // Рахуємо пропорцію зображення (ширина поділена на висоту)
                 const aspect = texture.image.width / texture.image.height;
                 
-                const baseHeight = 0.45; // Оптимальний розмір плиточки
+                // Задаємо бажану базову висоту для всіх фото на екрані (наприклад, 1.2)
+                const baseHeight = 1.2;
+                // Автоматично вираховуємо ширину, яка збереже оригінальні пропорції
                 const targetWidth = baseHeight * aspect;
 
+                // Масштабуємо рамку разом із фото
                 mesh.scale.set(targetWidth, baseHeight, 1);
 
+                // Додаємо текстуру в матеріал і робимо її видимою
                 material.map = texture;
                 material.visible = true;
                 material.needsUpdate = true;
             });
-        });
+        }
 
-        // --- 5. АНІМАЦІЯ ---
         function animate() {
             requestAnimationFrame(animate);
             controls.update(); 
@@ -178,6 +110,7 @@
         animate();
 
         window.addEventListener('resize', onWindowResize, false);
+
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
@@ -186,3 +119,4 @@
     </script>
 </body>
 </html>
+
