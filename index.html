@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Нейромережа з Наскрізним Рухом</title>
+    <title>3D Нейромережа з Безмежним Наближенням</title>
     <style>
         body {
             margin: 0;
@@ -26,38 +26,31 @@
         scene.background = new THREE.Color(0x000308); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // Ставимо камеру на самий початок коридору
-        camera.position.set(0, 0, 14); 
+        // Камера стоїть попереду на безпечній відстані
+        camera.position.set(0, 0, 8); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
+        // OrbitControls тепер відповідає ТІЛЬКИ за гарне обертання навколо центру
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true; 
         controls.dampingFactor = 0.05;
-        
-        // КРИТИЧНО: Вимикаємо стандартний зум, бо ми написали свій, наскрізний
-        controls.enableZoom = false;      
+        controls.enableZoom = false; // Вимикаємо старий зум, бо керуємо рухом світу самостійно
 
         const worldGroup = new THREE.Group();
         scene.add(worldGroup);
 
         const textureLoader = new THREE.TextureLoader();
-        const count = 40; 
+        const count = 40; // Ваша кількість фото
         const meshes = [];
-
-        const photoPaths = [
-            'foto/1.jpg',
-            'foto/2.jpg',
-            'foto/3.jpg'
-        ];
-
         const baseGeometry = new THREE.PlaneGeometry(1, 1);
 
+        // Будуємо тунель, який іде вглиб екрана (від 0 до -24)
         for (let i = 0; i < count; i++) {
-            const z = (i / count) * 24 - 12; // Коридор від -12 до 12
+            const z = -(i / count) * 24; 
             const angle = i * 0.8;
             const radius = 3.5 + Math.random() * 2.5; 
             
@@ -75,15 +68,14 @@
             meshes.push(mesh);
 
             const edges = new THREE.EdgesGeometry(baseGeometry);
-            const lineMaterial = new THREE.LineBasicMaterial({ 
-                color: 0x00f3ff, 
-                linewidth: 2 
-            });
+            const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00f3ff, linewidth: 2 });
             const wireframe = new THREE.LineSegments(edges, lineMaterial);
             wireframe.position.z = 0.005;
             mesh.add(wireframe);
 
-            textureLoader.load(photoPaths[i % 3], function(texture) {
+            // АВТОМАТИЧНЕ ЗАВАНТАЖЕННЯ: підставляє файли від 1.jpg до 40.jpg
+            const photoNumber = (i % 40) + 1; 
+            textureLoader.load(`foto/${photoNumber}.jpg`, function(texture) {
                 const aspect = texture.image.width / texture.image.height;
                 const baseHeight = 1.4; 
                 const targetWidth = baseHeight * aspect;
@@ -95,7 +87,7 @@
             });
         }
 
-        // Побудова зв'язків
+        // Побудова нейронних зв'язків (ліній)
         const lineGeometry = new THREE.BufferGeometry();
         const linePositions = [];
         const lineColors = [];
@@ -120,11 +112,11 @@
         const networkLines = new THREE.LineSegments(lineGeometry, networkMaterial);
         worldGroup.add(networkLines);
 
-        // Світні точки
+        // Космічний пил / зірки
         const starsGeometry = new THREE.BufferGeometry();
         const starsPositions = [];
         for (let i = 0; i < 150; i++) {
-            starsPositions.push((Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 30);
+            starsPositions.push((Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20, -(Math.random()) * 30);
         }
         starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsPositions, 3));
         const starsMaterial = new THREE.PointsMaterial({ color: 0x00f3ff, size: 0.06 });
@@ -133,33 +125,29 @@
 
 
         // ==========================================
-        // ЛОГІКА НАСКРІЗНОГО РУХУ (ПЕРЕМІЩЕННЯ ПО Z)
+        // КЕРУВАННЯ РУХОМ СВІТУ (ПЕРЕМІЩЕННЯ ГРУПИ)
         // ==========================================
-        
-        function moveThroughCorridor(delta) {
-            // Обмежуємо рух, щоб користувач не полетів у нескінченну порожнечу
-            let newTargetZ = controls.target.z + delta;
-            if (newTargetZ < -15) newTargetZ = -15; // Кліп перед задньою межею
-            if (newTargetZ > 14) newTargetZ = 14;   // Кліп перед передньою межею
+        function moveWorld(delta) {
+            worldGroup.position.z += delta;
             
-            const actualDelta = newTargetZ - controls.target.z;
-            
-            // Рухаємо вперед/назад і камеру, і точку її фокусування одночасно
-            camera.position.z += actualDelta;
-            controls.target.z += actualDelta;
+            // Обмежуємо рух: 
+            // -2: не дає відлетіти занадто далеко назад від перших фото
+            // 28: дозволяє протягнути навіть найвіддаленіші фото впритул до камери
+            if (worldGroup.position.z < -2) worldGroup.position.z = -2;
+            if (worldGroup.position.z > 28) worldGroup.position.z = 28;
         }
 
-        // 1. Рух мишкою (коліщатко)
+        // 1. Прокрутка мишкою
         window.addEventListener('wheel', (e) => {
-            moveThroughCorridor(e.deltaY * 0.02);
+            // Крутимо коліщатко вгору — світ рухається на нас (вглиб)
+            moveWorld(-e.deltaY * 0.015);
         }, { passive: true });
 
-        // 2. Рух пальцями на смартфонах (Pinch-to-zoom / Щипок)
+        // 2. Жести на смартфонах (Щипок / Pinch)
         let touchStartDist = 0;
         
         window.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
-                // Рахуємо початкову відстань між двома пальцями
                 touchStartDist = Math.hypot(
                     e.touches[0].pageX - e.touches[1].pageX,
                     e.touches[0].pageY - e.touches[1].pageY
@@ -169,17 +157,16 @@
 
         window.addEventListener('touchmove', (e) => {
             if (e.touches.length === 2) {
-                // Рахуємо поточну відстань між пальцями під час руху
                 const dist = Math.hypot(
                     e.touches[0].pageX - e.touches[1].pageX,
                     e.touches[0].pageY - e.touches[1].pageY
                 );
                 
-                // Вираховуємо різницю (наближають пальці чи віддаляють)
-                const delta = (touchStartDist - dist) * 0.04;
-                moveThroughCorridor(delta);
+                // Пальці розводяться (зум) -> підтягуємо світ ближче
+                const delta = (dist - touchStartDist) * 0.03;
+                moveWorld(delta);
                 
-                touchStartDist = dist; // Оновлюємо базову точку
+                touchStartDist = dist;
             }
         }, { passive: true });
 
@@ -189,6 +176,7 @@
         function animate() {
             requestAnimationFrame(animate);
 
+            // Оскільки група рухається, вираховуємо позицію камери в локальних координатах рухомої групи
             meshes.forEach(mesh => {
                 localCameraPos.copy(camera.position).sub(worldGroup.position);
                 mesh.lookAt(localCameraPos);
